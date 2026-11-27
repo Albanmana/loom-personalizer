@@ -10,12 +10,12 @@ link where their face greets that lead over the lead's LinkedIn profile, then sh
   every command, check its result, and say in one line what is done.
 - Plain words. Do not show commands, file names or JSON unless they ask or something fails.
 - Offer an obvious reply for each question ("yes", "ready", "done").
-- **Never assume their business, audience, product or variables.** Take no wording from an example into their
-  script. Examples in questions must stay generic.
-- Keep `data/setup-progress.md` up to date: steps done, what they sell, the variables, the approved intro, the
-  example lead, the list of what the demo shows, and whether n8n is set up.
+- **Never assume their business, audience, product or variables, and never write their script.** They record in
+  their own words; their script is what they said. Do not ask what they sell, why the lead should care or how long
+  their demo is. Examples must stay generic.
+- Keep `data/setup-progress.md` up to date: steps done, the variables, the approved intro, and whether n8n is set up.
 - Start by reading that file, then `python3 studio.py doctor` (if it cannot run, nothing is installed). `doctor` does
-  not know about the approved script or the first video. If something is already done, say which step you resume at
+  not know about the approved intro or the first video. If something is already done, say which step you resume at
   and why; skip the welcome.
 
 ## Rules
@@ -100,38 +100,18 @@ in `data/template/template.json`. Setup is only ready for English videos: the in
 only and `doctor` expects it. For another language, say now that it has not been tested; it needs a multilingual
 whisper.cpp model (`transcribe --model <file> --language <code>`), whose download they must approve.
 
-## Step 5 of 8: Your script and variables (before any recording)
-Ask these one at a time, and wait for each answer.
-1. **Say:** "What do you sell or show, and who do you send these videos to?"
-2. **Say:** "What should change from one lead to the next? For example a first name, a company name, a job title, a
-   city, or something you noticed about them. Pick only what you can find quickly for every lead."
-3. **Say:** "In one or two sentences, why should that person care? Only claims you can back up."
-
-4. **Say:** "How long is your demo? About one minute works well. Longer costs more: about $5 per minute, once."
-
-Then draft the **intro** from their answers only: 35 to 60 words (about 12 to 20 seconds), ending with a hand-over to
-the demo. Write variables as plain words in braces, for example `{First name}`: each one becomes a form field with
-that name. The form shows names as written; avoid two that differ only by capitals. Rules for the draft:
-- Use at least one variable. The **first** one names the public video in Loom ("Video for <its value>"), so it should
-  be the person's name or company. Reordering form fields changes it.
-- Avoid wording whose grammar depends on the value, such as "a {Job title}" or "his team", unless it fits every lead.
-- No claim, number or result they did not give you.
-
+## Step 5 of 8: Your two recordings (in your own words)
+Give these right after the voice. Ask nothing about their script first.
 **Say:**
-> Here is your intro: "<draft>". In your form you'll fill in: <variable list>. Each video will be titled in Loom
-> "Video for <example first value>". What would you change?
-
-Repeat until they approve. Save it to `intro.text` in the template. Then ask for one **example lead** (a value for
-each variable) that they will say while recording. It must be invented or someone who agreed.
-For the demo, do not write a script unless they ask: ask them to list, in order, what they will show.
-
-## Step 6 of 8: Two recordings
-**Say:**
-> **Recording 1: your face and voice.** Use QuickTime or any recorder, full screen, camera at eye level, good light.
+> **Recording 1: your face and voice.** Record the whole video the way you want your leads to get it, in your own
+> words. Use QuickTime or any recorder, full screen, camera at eye level, good light.
 > 1. Stay silent for 2 seconds.
-> 2. Say your intro with the example lead: "<intro filled with the example>"
+> 2. **Intro:** talk to one example lead, as if the video were only for them. Greet them by name and say whatever you
+>    would say about them: whatever is specific to them can change for each lead later. Use an invented lead, or
+>    someone who agreed. About 12 to 20 seconds works well, ending with a hand-over to your demo.
 > 3. Stay silent for 1 full second. This is where the video is cut.
-> 4. Present your demo, as if you were clicking through it: <their list>.
+> 4. **Demo:** present it as if you were clicking through it. It is the same for every lead, so don't say their name
+>    here. About one minute works well: longer costs more, about $5 per minute, paid once.
 >
 > Say "done" and drag the file here.
 
@@ -145,15 +125,40 @@ Then:
 >
 > Say "done" and drag the file here.
 
-Copy both into `data/template/recordings/` and set their names in `template.json`.
+If they already recorded both, take them as they are: ask them to record again only for a real problem (no pause or
+sound to sync on, private data on screen), and say which.
 
-### Prepare the template (you, without questions)
-- `python3 studio.py sync`, then `python3 studio.py transcribe`.
+Copy both into `data/template/recordings/` and set their names in `template.json`. Then run `python3 studio.py sync`
+and `python3 studio.py transcribe`.
+
+## Step 6 of 8: What changes for each lead
+Work from the transcript of recording 1. The intro ends at their pause before the demo. The transcript misspells
+names and product words: fix the obvious ones.
+**Say:**
+> Here is your intro, as you said it: "<intro transcript>". What should change from one lead to the next? From what you
+> said, it could be: <the specific details found in it, quoted>. Tell me which ones, any I missed, and any word I got
+> wrong.
+
+Then put their choices in braces **inside their own words**. Do not rewrite, shorten or improve the intro, and add no
+sentence or claim. Write variables as plain words, for example `{First name}`: each becomes a form field with that
+name. The form shows names as written; avoid two that differ only by capitals.
+- Use at least one variable. The **first** one names the public video in Loom ("Video for <its value>"), so it should
+  be the person's name or company. Reordering form fields changes it.
+- If the words around a variable would be wrong for some values, such as "a {Job title}" or "his team", point it out
+  and suggest the smallest change. They decide.
+- If they said nothing specific to the example lead, say so and ask which words should change.
+
+**Say:**
+> Your intro will be: "<intro with variables>". In your form you'll fill in: <variable list>. Each video will be titled
+> in Loom "Video for <example value they said>". Is it right?
+
+Repeat until they agree, then save it to `intro.text` in the template.
+
+### Prepare the rest of the template (you, without questions)
 - `intro.start/end` and `demo.start/end` are **camera recording** seconds. Cut in silences. If the take starts with
   silence, the transcript can stretch the first words over it: find where speech really starts with FFmpeg's
   `silencedetect` (or by transcribing a short clip around it).
-- `intro.text` stays the approved intro with its variables. If they said something different on camera, show both
-  and ask which one the AI voice should say.
+- `intro.text` is the intro agreed in step 6: their words with the variables.
 - `demo.text` is what they said after the intro, corrected, with no variables. The transcript misspells product
   names: fix what you can and ask about the rest.
 - Crops: `python3 studio.py frame camera --at 5` and `frame screen --at <a demo moment>`, look at the images, set

@@ -12,8 +12,8 @@ Claude guides you in 8 steps and asks before anything costs money or gets publis
 2. Save your HeyGen and Fal keys (typed into a private pop-up).
 3. Sign in to Loom and LinkedIn in the windows that open.
 4. Create your AI voice in HeyGen.
-5. Choose your own variables and agree on your intro script.
-6. Make two recordings: you speaking, then your screen while that recording plays.
+5. Make two recordings in your own words: you speaking, then your screen while that recording plays.
+6. Choose what changes for each lead: your script is taken from what you said.
 7. Approve your demo.
 8. Fill in your form for a first video.
 
