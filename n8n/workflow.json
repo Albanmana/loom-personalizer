@@ -1,0 +1,629 @@
+{
+  "id": "loomPersonalizer1",
+  "name": "Loom Personalizer · one lead",
+  "nodes": [
+    {
+      "id": "28f12ef1-2b5b-5d48-b06d-1ac903dfe98c",
+      "name": "New lead",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "formTitle": "New lead",
+        "formDescription": "One lead per submission. Submitting spends HeyGen and Fal credit, then uploads a public Loom video.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "LinkedIn profile URL",
+              "placeholder": "Paste the profile address",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "webhookId": "d503a61e-3ada-525e-ae94-214e128004af"
+    },
+    {
+      "id": "6f0f7a52-2b0e-4d0a-9c57-3f6f2a1c9d10",
+      "name": "Record LinkedIn scroll",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "url": "http://127.0.0.1:8896/api/page-recordings",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 330000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          }
+        },
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { url: $('New lead').first().json['LinkedIn profile URL'], script: $('Intro script').first().json.script, variables: Object.fromEntries(Object.entries($('New lead').first().json).filter(([key]) => !['LinkedIn profile URL', 'submittedAt', 'formMode'].includes(key))) } }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "lpWorker000000001",
+          "name": "Loom Personalizer · local worker"
+        }
+      }
+    },
+    {
+      "id": "c4b8e2d1-93a6-4f57-b0e8-2d6a1f9c7b35",
+      "name": "Intro script",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e7a1c5f2-0d48-4b9e-a36c-81f4b2d9c6a0",
+              "name": "script",
+              "type": "string",
+              "value": ""
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "4b553314-cb47-5fbe-bd36-d503d244015d",
+      "name": "Create lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "url": "http://127.0.0.1:8896/api/leads",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 60000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          }
+        },
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { variables: Object.fromEntries(Object.entries($('New lead').first().json).filter(([key]) => !['LinkedIn profile URL', 'submittedAt', 'formMode'].includes(key))), script: $('Intro script').first().json.script, pageRecording: $('Record LinkedIn scroll').first().json.pageRecording, url: $('Record LinkedIn scroll').first().json.url } }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "lpWorker000000001",
+          "name": "Loom Personalizer · local worker"
+        }
+      }
+    },
+    {
+      "id": "1cd9ac8f-3acb-52e9-8675-afa0426a771f",
+      "name": "HeyGen · intro voice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "url": "https://api.heygen.com/v3/models/audio/tts",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 180000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ 'lp-voice-' + $json.jobId }}"
+            }
+          ]
+        },
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { voice_id: $json.voiceId, text: $json.script, language: $json.language, speed: $json.speed, model: 'heygen-voice-1' } }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "lpHeygen000000001",
+          "name": "Loom Personalizer · HeyGen"
+        }
+      }
+    },
+    {
+      "id": "e18d90e7-b4b8-5265-a32e-d1696a985bb0",
+      "name": "Add page, lip-sync and assemble",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "url": "={{ 'http://127.0.0.1:8896/api/jobs/' + $('Create lead').first().json.jobId + '/render' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 60000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          }
+        },
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { audioUrl: $json.data.audio_url } }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "lpWorker000000001",
+          "name": "Loom Personalizer · local worker"
+        }
+      }
+    },
+    {
+      "id": "edcb1422-839c-52db-8969-362f37820613",
+      "name": "Wait 10 s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1440,
+        0
+      ],
+      "parameters": {
+        "amount": 10,
+        "unit": "seconds"
+      },
+      "webhookId": "326507cc-bd37-5e3b-86ee-1af8e5acd81b"
+    },
+    {
+      "id": "ce2632df-825c-54cc-8339-f1f8cc28fa29",
+      "name": "Check status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        0
+      ],
+      "parameters": {
+        "url": "={{ 'http://127.0.0.1:8896/api/jobs/' + $('Create lead').first().json.jobId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 60000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "lpWorker000000001",
+          "name": "Loom Personalizer · local worker"
+        }
+      }
+    },
+    {
+      "id": "ef614caf-1f97-561c-bcc5-73bf51760ee6",
+      "name": "Video ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1920,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "9f059b58-bb98-55ad-b044-427076f68ff2",
+              "leftValue": "={{ $json.status === 'complete' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "7cfb8dc7-9754-5571-8999-c9330ccfd07d",
+      "name": "Render failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1920,
+        220
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "b11a4d46-9ecc-5d9b-946f-e4235e0a1e26",
+              "leftValue": "={{ $json.status === 'failed' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "01c25b19-e694-5b55-bd49-e887ffddc8ae",
+      "name": "Show render error",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        2180,
+        220
+      ],
+      "parameters": {
+        "errorMessage": "={{ $json.error || 'The video could not be made.' }}"
+      }
+    },
+    {
+      "id": "af5ab755-0bf0-59bb-a229-0d1a8ae232e4",
+      "name": "Download MP4",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2180,
+        -80
+      ],
+      "parameters": {
+        "url": "={{ $json.videoUrl }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 120000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "lpWorker000000001",
+          "name": "Loom Personalizer · local worker"
+        }
+      }
+    },
+    {
+      "id": "03ba23a2-f855-5ed2-88cc-2129dd3959b1",
+      "name": "Upload to Loom",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        -80
+      ],
+      "parameters": {
+        "url": "http://127.0.0.1:8892/upload",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 600000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          }
+        },
+        "method": "POST",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "privacy",
+              "value": "public"
+            },
+            {
+              "name": "title",
+              "value": "={{ ('Video for ' + Object.values($('Check status').first().json.variables)[0]).slice(0, 250) }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "video/mp4"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data"
+      },
+      "retryOnFail": false,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "lpUpload000000001",
+          "name": "Loom Personalizer · Loom uploader"
+        }
+      }
+    },
+    {
+      "id": "38d7c118-f363-52f2-92ff-80ea5929884b",
+      "name": "Loom link",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2660,
+        -80
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "df147c52-8fb3-596d-9ae2-4451cd04c36c",
+              "name": "loomUrl",
+              "type": "string",
+              "value": "={{ $json.url }}"
+            },
+            {
+              "id": "9841f69f-4cf9-58ef-9f02-83c3bde10259",
+              "name": "profileUrl",
+              "type": "string",
+              "value": "={{ $('Check status').first().json.url }}"
+            },
+            {
+              "id": "8ce54638-281b-5f98-9756-fe53639ada16",
+              "name": "cutAtSeconds",
+              "type": "string",
+              "value": "={{ String($('Check status').first().json.cutAt) }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "2590e6a0-00b2-59cc-b62a-11c4e46628c2",
+      "name": "How to use",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -300
+      ],
+      "parameters": {
+        "width": 760,
+        "height": 190,
+        "content": "## One lead → one Loom link\nOpen the **form** (production URL of *New lead*), fill one field per detail and paste the lead's LinkedIn profile address. The scroll is recorded for you, before anything paid.\nThe result is in **Executions**, in **Loom link**. The link is public.\nIf the upload step fails, check your Loom library before running again, to avoid a duplicate."
+      }
+    },
+    {
+      "id": "a1d3c9e4-7b52-4a8f-8c16-5e0b9d2f4a77",
+      "name": "Your script",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        820,
+        -560
+      ],
+      "parameters": {
+        "width": 900,
+        "height": 450,
+        "content": "## Your script\nRun `studio.py n8n-setup` to show it here."
+      }
+    }
+  ],
+  "connections": {
+    "New lead": {
+      "main": [
+        [
+          {
+            "node": "Intro script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create lead": {
+      "main": [
+        [
+          {
+            "node": "HeyGen · intro voice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen · intro voice": {
+      "main": [
+        [
+          {
+            "node": "Add page, lip-sync and assemble",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add page, lip-sync and assemble": {
+      "main": [
+        [
+          {
+            "node": "Wait 10 s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 10 s": {
+      "main": [
+        [
+          {
+            "node": "Check status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check status": {
+      "main": [
+        [
+          {
+            "node": "Video ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Video ready?": {
+      "main": [
+        [
+          {
+            "node": "Download MP4",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Render failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render failed?": {
+      "main": [
+        [
+          {
+            "node": "Show render error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 10 s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download MP4": {
+      "main": [
+        [
+          {
+            "node": "Upload to Loom",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to Loom": {
+      "main": [
+        [
+          {
+            "node": "Loom link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Intro script": {
+      "main": [
+        [
+          {
+            "node": "Record LinkedIn scroll",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record LinkedIn scroll": {
+      "main": [
+        [
+          {
+            "node": "Create lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "pinData": {}
+}

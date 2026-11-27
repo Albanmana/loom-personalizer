@@ -1,0 +1,15 @@
+{
+  "voiceId": "",
+  "language": "en",
+  "speed": 1,
+  "recordings": {
+    "camera": "recordings/camera.mp4",
+    "screen": "recordings/screen.mp4",
+    "screenOffset": null
+  },
+  "intro": { "start": 0, "end": 0, "text": "" },
+  "demo": { "start": 0, "end": 0, "text": "", "anchors": [] },
+  "camera": { "crop": [0, 0, 0, 0] },
+  "screen": { "crop": [0, 0, 0, 0] },
+  "bubble": { "x": 34, "y": 795, "size": 232 }
+}
