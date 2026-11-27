@@ -8,12 +8,13 @@
 - Video = personalised intro + **static demo** generated once and approved. No phrase detection: the end of the intro audio is the cut.
 - AI voice (the user's own HeyGen clone, made in HeyGen) for both parts. Sync Lipsync 2 Pro on Fal.
 - Fixed webcam crop and circle, set once per template.
-- Page picture: the scroll of the lead's LinkedIn profile, recorded by `capture/linkedin.mjs` before anything paid.
-  It drives installed Chrome through the pipe already
-  used for the Loom sign-in, so Playwright is not needed. It uses its own Chrome profile that the user signs in to,
-  scrolls like trackpad swipes with pauses (13.4 s),
-  hides the message list (refusing to record if it stays visible), reads through the page once so that sections load, and
-  stops on any sign-in wall or security check. This replaces the uploaded page video.
+- Page picture: the scroll of the lead's LinkedIn profile or another public web page, recorded by
+  `capture/linkedin.mjs` before anything paid. Other websites open in an empty temporary profile; addresses that lead
+  to this Mac or its network are refused. The recorder drives installed Chrome through the pipe already used for the
+  Loom sign-in, so Playwright is not needed. It scrolls like trackpad swipes with pauses (13.4 s) and reads through
+  the page once so that sections load. For LinkedIn it uses its own Chrome profile that the user signs in to, hides the
+  message list (refusing to record if it stays visible) and stops on any sign-in wall or security check. This replaces
+  the uploaded page video.
 - The form asks only for plain details: `n8n-setup` builds one field per `{variable}` of the intro plus the profile
   address, and puts the intro in an editable **Intro script** node (the demo text is shown in a note).
 - After that first install the intro and form belong to the user and are edited in n8n; `{Name}` is filled from the

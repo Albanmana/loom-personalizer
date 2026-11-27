@@ -1,10 +1,12 @@
 import json
 import socket
+import subprocess
 import tempfile
 import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -166,6 +168,17 @@ class ServerTests(unittest.TestCase):
         _, state = self.finish('broken.mp4')
         self.assertEqual(state['status'], 'failed', state)
         self.assertTrue(state['error'])
+
+
+class CaptureMessageTests(unittest.TestCase):
+    def test_a_failed_capture_of_any_website_does_not_blame_linkedin(self):
+        slow = subprocess.TimeoutExpired('node', 300)
+        silent = subprocess.CompletedProcess([], 1, '', '')
+        with mock.patch.object(server.config, 'node22', return_value='node'):
+            for outcome in (slow, silent):
+                with mock.patch.object(server.subprocess, 'run', side_effect=[outcome]), \
+                        self.assertRaisesRegex(RuntimeError, 'page capture'):
+                    server.page_capture('https://acme.example.com/', 'out.mp4')
 
 
 class AudioHostTests(unittest.TestCase):

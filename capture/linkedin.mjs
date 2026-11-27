@@ -1,7 +1,11 @@
-// Records the scroll of a LinkedIn profile in this package's own Chrome profile, signed in by the user.
+// Records the scroll of a lead's web page. LinkedIn profiles use this package's own Chrome profile, signed in by
+// the user. Any other website is opened in an empty, temporary one.
 // Used for every lead by the local worker, before anything paid. It never works around a sign-in or security check.
 import { execFile } from 'node:child_process';
+import { lookup } from 'node:dns/promises';
 import { access, mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
+import { BlockList, isIP } from 'node:net';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
@@ -31,6 +35,13 @@ const RUN = 'python3 studio.py linkedin';
 // LinkedIn can keep the profile's address and show this instead of the person.
 const UNAVAILABLE = /^(?:(?:this )?profile (?:is not|isn't|isn’t) available|page not found)[.!]?$/i;
 const URL_ERROR = 'Use a LinkedIn /in/ profile URL over HTTPS.';
+const PUBLIC_ERROR = 'Use a full public web address, for example https://example.com.';
+// This Mac and its network: the video is published, so their pages are never recorded.
+const PRIVATE = new BlockList();
+for (const [network, bits] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8],
+  ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.168.0.0', 16]]) PRIVATE.addSubnet(network, bits);
+for (const [network, bits] of [['::', 127], ['fc00::', 7], ['fe80::', 10]]) PRIVATE.addSubnet(network, bits, 'ipv6');
+const isPrivate = (address) => PRIVATE.check(address, `ipv${isIP(address)}`);
 
 export function profileUrl(value) {
   try {
@@ -43,6 +54,42 @@ export function profileUrl(value) {
     return `https://www.linkedin.com/in/${encodeURIComponent(name)}/`;
   } catch {
     throw new Error(URL_ERROR);
+  }
+}
+
+const hostOf = (url) => url.hostname.replace(/\.$/, '');
+const onLinkedIn = (url) => /(^|\.)linkedin\.com$/.test(hostOf(url));
+
+// Which page to record, and whether it needs the LinkedIn sign-in. Other LinkedIn pages stay refused: signed in,
+// they can show private conversations.
+export function pageTarget(value) {
+  let url;
+  try {
+    url = new URL(String(value).trim());
+  } catch {
+    throw new Error(PUBLIC_ERROR);
+  }
+  if (onLinkedIn(url)) return { url: profileUrl(value), linkedin: true };
+  const host = hostOf(url);
+  // A name without a dot is a machine on the local network. IPv6 addresses are refused too.
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || !host.includes('.')
+    || host.startsWith('[') || /\.(local|localhost|internal)$/.test(host) || (isIP(host) && isPrivate(host))) {
+    throw new Error(PUBLIC_ERROR);
+  }
+  return { url: url.href, linkedin: false };
+}
+
+// May the page at this address be recorded, as the same kind as the one asked for? The text of an address does not
+// say where its name points (localtest.me is this Mac), so another website's name is also looked up.
+export async function allowedPage(address, linkedin, resolve = lookup) {
+  try {
+    const target = pageTarget(address.split(/[?#]/)[0]);
+    if (target.linkedin !== linkedin) return false;
+    if (linkedin) return true;
+    const found = await resolve(hostOf(new URL(target.url)), { all: true });
+    return !found.some((entry) => isPrivate(entry.address));
+  } catch {
+    return false;
   }
 }
 
@@ -138,7 +185,7 @@ async function openPage(client) {
   return { send, evaluate };
 }
 
-export async function record(pageUrl, output, { profile, isProfile, wait = 30_000 }) {
+export async function record(pageUrl, output, { profile, isProfile, linkedin = true, wait = 30_000 }) {
   await mkdir(profile, { recursive: true, mode: 0o700 });
   await mkdir(dirname(output), { recursive: true });
   const folder = await mkdtemp(join(dirname(output), '.capture-'));
@@ -149,16 +196,21 @@ export async function record(pageUrl, output, { profile, isProfile, wait = 30_00
     await send('Emulation.setDeviceMetricsOverride',
       { width: WIDTH, height: HEIGHT, deviceScaleFactor: 1, mobile: false });
     const { errorText } = await send('Page.navigate', { url: pageUrl });
-    if (errorText) throw new Error(`The browser could not open this LinkedIn profile (${errorText}).`);
+    if (errorText) throw new Error(`The browser could not open this page (${errorText}).`);
     const read = `(${inspect})(${[HEADING, CHALLENGE, SIGN_IN].map((s) => JSON.stringify(s))}, (${scroller})())`;
     const refuseIfMessagingShows = async () => {
-      if (await evaluate(`(${messagingShown})()`)) {
+      if (linkedin && await evaluate(`(${messagingShown})()`)) {
         throw new Error('Nothing was recorded: the LinkedIn message list could not be hidden. '
           + 'LinkedIn has probably changed its page.');
       }
     };
+    // Sign-in walls and security checks are recognised on LinkedIn only: many websites show a sign-in box.
     const check = (state) => {
-      const reason = state.url.startsWith('about:') ? null : blockReason(state);
+      let reason = null;
+      if (!state.url.startsWith('about:')) {
+        if (linkedin) reason = blockReason(state);
+        else if (state.status >= 400) reason = `The website did not load this page (HTTP ${state.status}).`;
+      }
       if (reason) throw new Error(reason);
     };
     let state;
@@ -171,18 +223,19 @@ export async function record(pageUrl, output, { profile, isProfile, wait = 30_00
         continue;
       }
       check(state);
-      if (UNAVAILABLE.test(state.name)) throw new Error('LinkedIn did not display an available profile.');
-      if (state.loaded && state.name && state.travel >= 20) break;
+      if (linkedin && UNAVAILABLE.test(state.name)) throw new Error('LinkedIn did not display an available profile.');
+      const named = !linkedin || state.name;
+      if (state.loaded && named && state.travel >= 20 && !state.url.startsWith('about:')) break;
       if (Date.now() > deadline) {
-        throw new Error(state.name ? 'The LinkedIn profile did not have enough content to scroll.'
+        throw new Error(named ? 'The page did not have enough content to scroll.'
           : 'No visible LinkedIn profile heading appeared.');
       }
     }
-    if (!isProfile(state.url)) throw new Error('LinkedIn redirected away from the profile page.');
+    if (!await isProfile(state.url)) throw new Error('The site redirected to a page that cannot be recorded.');
     await evaluate(`(async () => {
       // A constructed style sheet: the site's content security policy ignores an added <style> tag.
       const sheet = new CSSStyleSheet();
-      sheet.replaceSync(${JSON.stringify(HIDDEN)});
+      sheet.replaceSync(${JSON.stringify(linkedin ? HIDDEN : '')});
       document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
       (${scroller})().scrollTo({ top: 0, behavior: 'instant' });
       await Promise.race([Promise.all([document.fonts.ready, ...[...document.images]
@@ -201,7 +254,14 @@ export async function record(pageUrl, output, { profile, isProfile, wait = 30_00
       await pause(2500);
     })()`);
     await refuseIfMessagingShows();
-    const { travel } = await evaluate(read);
+    const ready = await evaluate(read);
+    check(ready);
+    // Another site may rewrite its address once loaded. LinkedIn must stay on the profile first reached.
+    if (!linkedin && !await isProfile(ready.url)) {
+      throw new Error('The site redirected to a page that cannot be recorded.');
+    }
+    const recorded = linkedin ? state.url : ready.url;
+    const { travel } = ready;
     let previous;
     let picture;
     for (const [number, offset] of scrollOffsets(travel).entries()) {
@@ -217,7 +277,7 @@ export async function record(pageUrl, output, { profile, isProfile, wait = 30_00
     check(end);
     await refuseIfMessagingShows();
     const path = (value) => value.split(/[?#]/)[0];
-    if (path(end.url) !== path(state.url)) throw new Error('LinkedIn left the profile during the capture.');
+    if (path(end.url) !== path(recorded)) throw new Error('The page changed during the capture.');
     const movie = join(folder, 'capture.mp4');
     await promisify(execFile)('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-nostdin', '-framerate', String(FPS),
       '-i', join(folder, 'frame-%04d.jpg'), '-an', '-c:v', 'libx264', '-threads', '3', '-preset', 'veryfast',
@@ -230,19 +290,24 @@ export async function record(pageUrl, output, { profile, isProfile, wait = 30_00
 }
 
 export async function capture(url, output, home) {
-  const wanted = profileUrl(url);
-  await access(join(home, 'signed-in')).catch(() => {
-    throw new Error(`LinkedIn is not connected yet. Run \`${RUN}\` and sign in.`);
-  });
-  const isProfile = (found) => {
+  const target = pageTarget(url);
+  // Checked again on the page reached: a redirect must not change which kind of page is recorded.
+  const isProfile = (found) => allowedPage(found, target.linkedin);
+  if (target.linkedin) {
+    await access(join(home, 'signed-in')).catch(() => {
+      throw new Error(`LinkedIn is not connected yet. Run \`${RUN}\` and sign in.`);
+    });
+    await record(target.url, output, { profile: join(home, 'browser'), isProfile });
+  } else {
+    if (!await isProfile(target.url)) throw new Error(`This address could not be found, or is not public: ${target.url}`);
+    const profile = await mkdtemp(join(tmpdir(), 'lp-page-'));
     try {
-      return Boolean(profileUrl(found.split(/[?#]/)[0]));
-    } catch {
-      return false;
+      await record(target.url, output, { profile, isProfile, linkedin: false });
+    } finally {
+      await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
     }
-  };
-  await record(wanted, output, { profile: join(home, 'browser'), isProfile });
-  return wanted;
+  }
+  return target.url;
 }
 
 // A visible window where the user signs in. The sign-in stays in this package's own browser profile.
@@ -278,7 +343,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     } else if (action === 'capture' && output) {
       console.log(JSON.stringify({ url: await capture(url, output, home) }));
     } else {
-      throw new Error('Use: linkedin.mjs login <folder> | capture <folder> <profile url> <out.mp4>');
+      throw new Error('Use: linkedin.mjs login <folder> | capture <folder> <page url> <out.mp4>');
     }
   } catch (error) {
     console.error(error.message);

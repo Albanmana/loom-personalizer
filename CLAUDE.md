@@ -22,7 +22,7 @@ link where their face greets that lead over the lead's LinkedIn profile, then sh
 - Never ask them to paste a key, cookie or password into this chat, and never print or read files in `data/secrets/`,
   `data/loom/` or `data/linkedin/`.
 - Never spend credit, publish, or connect or use their LinkedIn without a clear yes in this chat: `demo prepare
-  --yes`, running a lead, any upload, `studio.py linkedin`, any profile capture. Say the cost or risk first.
+  --yes`, running a lead, any upload, `studio.py linkedin`, any profile or page capture. Say the cost or risk first.
 - Use only what is in this folder. Do not reuse keys, voices, sessions or media found elsewhere on the Mac.
 - No real personal or confidential data in recordings: for example customers, patients, candidates, salaries,
   inboxes or internal tools. Adapt the examples to their business.
@@ -36,7 +36,7 @@ link where their face greets that lead over the lead's LinkedIn profile, then sh
 >
 > What you'll need:
 > - this Mac, with Google Chrome (or Brave, Edge or Chromium)
-> - leads who have a LinkedIn profile (other web pages are not supported)
+> - leads who have a LinkedIn profile, or another public web page
 > - a HeyGen account (your AI voice) and a Fal account (lip sync), both paid. Lip sync is about $5 per minute of
 >   video. Your demo is paid once: a 1-minute demo is about $5, a 3-minute one about $15. After that you pay only for
 >   each lead's intro, roughly $1 to $2. HeyGen charges for the voice on top. Check their current prices.
@@ -223,8 +223,10 @@ the moment where the intro becomes the demo and everything visible in the Linked
 
 ## Good to know
 - The scroll is 13.4 s of trackpad-like swipes, slowed by up to 1.2x or sped up to match the intro. It then holds the
-  top of the profile. Only LinkedIn `/in/` profiles. The message list is hidden, and nothing is recorded if it cannot
-  be. Do not run repeated test captures: each one is a visit from their account.
+  top of the page. On LinkedIn, only `/in/` profiles. Other public websites open in an empty browser without sign-ins:
+  their cookie banners are recorded, so watch the video.
+- On LinkedIn, the message list is hidden, and nothing is recorded if it cannot be. Do not run repeated test captures:
+  each one is a visit from their account.
 - `n8n-setup` again only updates the keys. Their intro and form live in n8n. `n8n-setup --replace` rebuilds the
   workflow from the template and **erases their edits in n8n**: ask first.
 - `doctor` only checks that the Loom and LinkedIn sign-ins exist, not that they still work.
@@ -236,8 +238,10 @@ the moment where the intro becomes the demo and everything visible in the Linked
 - LinkedIn asks to sign in or shows a security check: `python3 studio.py linkedin`; they complete it themselves.
   Never try to get around a check. Recorded scrolls are kept in `data/page-recordings/`.
 - A mistake in the intro or a missing value is refused before the profile is visited.
-- "No visible LinkedIn profile heading", "not enough content" or "message list could not be hidden": LinkedIn may
-  have changed its page. Nothing was spent. Do not weaken the message-hiding check.
+- "No visible LinkedIn profile heading" or "message list could not be hidden", or "not enough content" on a profile:
+  LinkedIn may have changed its page. Nothing was spent. Do not weaken the message-hiding check.
+- On another website, "not enough content", an HTTP error or an address that is not public: that page cannot be
+  recorded. Nothing was spent. Use another page; do not weaken the address check.
 - The Loom window does not accept a Google sign-in: choose Loom's email sign-in in that window instead.
 - Loom upload error 409 or a timeout: check their Loom library **before** running again, to avoid a duplicate.
 - Loom session expired: run `python3 studio.py loom` again.

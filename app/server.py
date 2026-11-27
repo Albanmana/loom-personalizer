@@ -230,15 +230,15 @@ def make_server(app: App, port=config.WORKER_PORT):
     return ThreadingHTTPServer(('127.0.0.1', port), Handler)
 
 
-def linkedin_capture(url, out) -> str:
+def page_capture(url, out) -> str:
     try:
         done = subprocess.run([config.node22(), str(config.ROOT / 'capture/linkedin.mjs'), 'capture',
                                str(config.LINKEDIN), url, str(out)], capture_output=True, text=True, timeout=CAPTURE_TIMEOUT)
     except subprocess.TimeoutExpired:
-        raise RuntimeError('The LinkedIn capture took too long. Try again.') from None
+        raise RuntimeError('The page capture took too long. Try again.') from None
     if done.returncode:
         lines = done.stderr.strip().splitlines()
-        raise RuntimeError(lines[-1][:300] if lines else 'The LinkedIn capture failed.')
+        raise RuntimeError(lines[-1][:300] if lines else 'The page capture failed.')
     return json.loads(done.stdout.strip().splitlines()[-1])['url']
 
 
@@ -246,7 +246,7 @@ def main():
     app = App(template_dir=config.TEMPLATE, jobs_dir=config.JOBS, loom_dir=config.LOOM_CONFIG,
               worker_token=config.token('worker.token'),
               download=providers.download, lipsync=providers.fal_lipsync(lambda: config.read_secret('fal.key')),
-              capture=linkedin_capture)
+              capture=page_capture)
     make_server(app).serve_forever()
 
 

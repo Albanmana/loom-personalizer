@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { access, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { createServer } from 'node:http';
 import { join } from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 import { findBrowser } from '../uploader/loom-login.mjs';
-import { blockReason, profileUrl, record, scrollOffsets } from './linkedin.mjs';
+import { allowedPage, blockReason, pageTarget, profileUrl, record, scrollOffsets } from './linkedin.mjs';
 
 test('only a LinkedIn profile address over HTTPS is accepted, without its tracking part', () => {
   assert.equal(profileUrl(' https://linkedin.com/in/jane-doe?utm=1 '), 'https://www.linkedin.com/in/jane-doe/');
@@ -15,6 +16,53 @@ test('only a LinkedIn profile address over HTTPS is accepted, without its tracki
     'https://www.linkedin.com/in/a/b', '']) {
     assert.throws(() => profileUrl(bad), /LinkedIn \/in\/ profile/, bad);
   }
+});
+
+test('any public web address can be recorded; only LinkedIn profiles use the LinkedIn sign-in', () => {
+  assert.deepEqual(pageTarget('https://linkedin.com/in/jane-doe?utm=1'),
+    { url: 'https://www.linkedin.com/in/jane-doe/', linkedin: true });
+  assert.deepEqual(pageTarget(' https://acme.example.com/about?lang=en '),
+    { url: 'https://acme.example.com/about?lang=en', linkedin: false });
+  assert.deepEqual(pageTarget('http://acme.example.com'), { url: 'http://acme.example.com/', linkedin: false });
+});
+
+test('other LinkedIn pages, local files and addresses on this Mac or its network are refused', () => {
+  for (const bad of ['https://www.linkedin.com/messaging/', 'https://fr.linkedin.com/feed/',
+    'https://www.linkedin.com./messaging/', 'http://www.linkedin.com/in/jane']) {
+    assert.throws(() => pageTarget(bad), /LinkedIn \/in\/ profile/, bad);
+  }
+  for (const bad of ['file:///etc/passwd', 'chrome://settings', 'https://user:pw@acme.example.com/', 'not a url', '',
+    'http://localhost:5690/', 'http://app.localhost/', 'http://127.0.0.1:8896/', 'http://2130706433/',
+    'http://[::1]/', 'http://192.168.1.1/', 'http://10.0.0.2/', 'http://172.20.0.1/', 'http://169.254.1.1/',
+    'http://0.0.0.0/', 'http://printer.local/', 'http://router/']) {
+    assert.throws(() => pageTarget(bad), /public web address/, bad);
+  }
+});
+
+test('a domain name that merely starts like a private address is public', () => {
+  for (const good of ['https://10.example.com/', 'https://127.example.org/', 'https://192.168.example.com/',
+    'https://8.8.8.8/']) {
+    assert.deepEqual(pageTarget(good), { url: good, linkedin: false }, good);
+  }
+});
+
+test('a name that points to this Mac or its network is not a page that can be recorded', async () => {
+  const pointsTo = (...addresses) => async () => addresses.map((address) => ({ address }));
+  assert.equal(await allowedPage('https://acme.example.com/', false, pointsTo('93.184.216.34', '2606:2800::1')), true);
+  for (const address of ['127.0.0.1', '10.0.0.2', '172.31.0.1', '192.168.1.1', '100.100.0.1', '169.254.1.1', '0.0.0.0',
+    '::1', '::', 'fd00::1', 'fe80::1', '::ffff:192.168.1.1']) {
+    assert.equal(await allowedPage('https://localtest.me/', false, pointsTo('93.184.216.34', address)), false, address);
+  }
+});
+
+test('the page reached must be of the same kind as the one asked for', async () => {
+  const never = async () => { throw new Error('LinkedIn needs no lookup'); };
+  const outside = async () => [{ address: '93.184.216.34' }];
+  assert.equal(await allowedPage('https://www.linkedin.com/in/jane/?trk=x', true, never), true);
+  assert.equal(await allowedPage('https://www.linkedin.com/feed/', true, never), false);
+  assert.equal(await allowedPage('https://acme.example.com/', true, outside), false);
+  assert.equal(await allowedPage('https://www.linkedin.com/in/jane/', false, outside), false);
+  assert.equal(await allowedPage('http://localhost:5690/', false, outside), false);
 });
 
 test('the scroll starts and ends at the top and lasts 13.4 seconds', () => {
@@ -178,3 +226,30 @@ test('a profile that LinkedIn says is unavailable is never recorded', { skip: !b
     await assert.rejects(access(out));
   }
 });
+
+test('another website needs no profile heading, and its own sign-in box does not stop the capture',
+  { skip: !browser, timeout: 90_000 }, async (t) => {
+    const folder = await folderFor(t);
+    const page = join(folder, 'site.html');
+    await writeFile(page, html('<main><p>Welcome</p><input name="session_password"><div style="height:3000px"></div></main>'));
+    const out = join(folder, 'out.mp4');
+    await record(pathToFileURL(page).href, out,
+      { profile: join(folder, 'browser'), isProfile: () => true, linkedin: false, wait: 8000 });
+    await access(out);
+  });
+
+test('another website that rewrites its own address just after loading is still recorded',
+  { skip: !browser, timeout: 90_000 }, async (t) => {
+    const folder = await folderFor(t);
+    const server = createServer((request, response) => response.writeHead(200, { 'content-type': 'text/html' })
+      .end(html('<main><div style="height:3000px"></div></main>'
+        + '<script>setTimeout(() => history.replaceState({}, "", "/renamed"), 1500)</script>')));
+    await new Promise((done) => server.listen(0, '127.0.0.1', done));
+    t.after(() => { server.closeAllConnections(); server.close(); });
+    const out = join(folder, 'out.mp4');
+    const seen = [];
+    await record(`http://127.0.0.1:${server.address().port}/old`, out, { profile: join(folder, 'browser'),
+      isProfile: (found) => seen.push(new URL(found).pathname) > 0, linkedin: false, wait: 8000 });
+    await access(out);
+    assert.equal(seen.at(-1), '/renamed', 'the address that is recorded is checked too');
+  });

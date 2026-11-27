@@ -27,7 +27,9 @@ The scroll of their profile is recorded for you. You can edit the intro and the 
 - One lead per form submission for now.
 - HeyGen receives your lead details as spoken text; Fal receives footage of your face.
 - Profile scrolls are recorded with your own LinkedIn account. LinkedIn does not allow automated tools: your account
-  can be limited. Only LinkedIn profiles are supported.
+  can be limited.
+- Other public websites can be recorded too. They open in an empty browser, without any of your sign-ins, so cookie
+  banners and sign-in boxes appear in the video. On LinkedIn, only `/in/` profiles are accepted.
 
 ## Not proven yet
 Installing on a Mac with default npm settings or without Homebrew,
